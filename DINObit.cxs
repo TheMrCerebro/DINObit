@@ -1,0 +1,458 @@
+'*********************************************************************
+'
+' Copyright (c) 2020-2022 TheMrCerebro
+'
+' DINObit - Zlib license.
+'
+' This software is provided 'as-is', without any express or
+' implied warranty. In no event will the authors be held
+' liable for any damages arising from the use of this software.
+'
+' Permission is granted to anyone to use this software for any purpose,
+' including commercial applications, and to alter it and redistribute
+' it freely, subject to the following restrictions:
+'
+' 1. The origin of this software must not be misrepresented;
+' you must not claim that you wrote the original software.
+' If you use this software in a product, an acknowledgment
+' in the product documentation would be appreciated but
+' is not required.
+'
+' 2. Altered source versions must be plainly marked as such,
+' and must not be misrepresented as being the original software.
+'
+' 3. This notice may not be removed or altered from any
+' source distribution.
+'
+'*********************************************************************
+
+#GLFW_WINDOW_TITLE="DINObit - by TheMrCerebro"
+#GLFW_WINDOW_WIDTH=512
+#GLFW_WINDOW_HEIGHT=512
+#MOJO_IMAGE_FILTERING_ENABLED=False
+
+Import mojo
+
+Import inc.coldet
+Import inc.autofit
+Import inc.fonts
+Import inc.hscore
+Import inc.shapes
+
+Function Main()
+	New Game()
+End
+
+Class BG
+	Field x:float,y:float,t:int,i:int
+	Field a:float,on:bool
+End
+
+Class ENEMY
+	Field x:float,y:float,t:int
+End
+
+Class Game Extends App
+	
+	'Constructor
+	Method OnCreate()
+
+		'Configuracion
+		SetVirtualDisplay(64,64)
+		SetUpdateRate(30)
+		Seed = Millisecs()
+		
+		'Carga las imagenes
+		imgTitle	= LoadImage("title.png")
+		imgPlayer	= LoadImage("player.png",6)
+		imgCactus	= LoadImage("cactus.png",8,16,4)
+		imgBird		= LoadImage("bird.png",2)
+		imgSky		= LoadImage("sky.png")
+		imgFloor	= LoadImage("floor.png",8,4,8)
+		imgGrass	= LoadImage("grass.png",8,4,8)
+		imgEarth	= LoadImage("earth.png",8,4,8)
+		imgCloud	= LoadImage("cloud.png")
+		imgVolcano	= LoadImage("volcano.png",32,32,6)
+		imgMoon		= LoadImage("moon.png")
+		imgDie		= LoadImage("die.png",64,64,4)
+		imgHit		= LoadImage("hit.png",5)
+		
+		'Carga la fuente de letras
+		LoadFont("terminal.fnt")
+		
+		'Carga los sonidos
+		sndSelect = LoadSound("select.wav")
+		sndDie	  = LoadSound("die.wav")
+		sndJump	  = LoadSound("jump.wav")
+
+		'Carga la musica
+		PlayMusic("theme.ogg")
+		
+		'Crea una lista de puntuaciones ficticia
+		AddScore(81,"TMC")
+		AddScore(62,"JDP")
+		AddScore(38,"DPS")
+		AddScore(26,"HDF")
+		AddScore(10,"SMB")
+		
+		'Crea el fondo del escenario
+		Local bg:BG
+		
+		'Crea la luna
+		bg=New BG
+		bg.x = 64
+		bg.y = 16
+		bg.i = 5
+		bgA.AddLast(bg)
+		
+		'Crea las nuves
+		bg=New BG
+		bg.x = 64
+		bg.y = 16
+		bg.i = 3
+		bgA.AddLast(bg)
+	
+		'Crea lel volvan
+		bg=New BG
+		bg.x = 8
+		bg.i = 4
+		bgA.AddLast(bg)
+		
+		'Crea el suelo
+		For Local i:int=0 Until 9+9+9
+			bg=New BG
+			bg.x = 8*(i Mod 9)
+			bg.t = Rnd(0,8)
+			bg.i = i/9
+			bgA.AddLast(bg)
+		Next
+
+	End
+
+	Method OnUpdate()
+
+		#If TARGET="glfw"
+		If KeyHit(KEY_ESCAPE) Then EndApp()
+		If KeyHit(KEY_F4)
+			fullscreen=Not fullscreen
+			If fullscreen
+				SetDeviceWindow(DesktopMode.Width,DesktopMode.Height,1)
+				HideMouse()
+			Else
+				SetDeviceWindow(512,512,4)
+				ShowMouse()
+			Endif
+		Endif
+		#Endif
+	
+		If fader=0
+		
+			Select state
+			
+			Case MENU
+
+				If KeyHit(KEY_X)
+					fader = 1
+					time  = 0
+					pa    = 0
+					py    = 40
+					psy   = 0
+					die   = false
+					PlaySound(sndSelect,3)
+					state=INGAME
+				Endif
+				
+			Case INGAME
+				
+				'Controiles del jugador
+				If Not die
+	
+					If KeyHit(KEY_UP) And Not jump
+						PlaySound(sndJump,1)
+						jump = True
+						psy  = -4.2
+						pa   = 0
+					Else
+						If Not jump
+							If KeyDown(KEY_DOWN)
+								pa  = 4+(0.01*Millisecs) Mod 2
+								poy = 7
+							Else
+								pa  = 1+(0.01*Millisecs) Mod 2
+								poy = 1
+							Endif
+						endif
+						If py >= 39.6
+							psy  = 0
+							jump = False
+							py   = 39.6
+						endif
+					Endif
+
+				Endif
+				
+				psy += 0.4'0.4=gravedad
+				
+				py += psy
+
+				'Actualiza los obstaculos
+				For Local enm:=Eachin enmA
+				
+					If enm.x<-8 Then enmA.RemoveEach(enm)
+					
+					If Not die 
+						Local ox:int,oy:int,w:int,h:int
+						If enm.t<4 Then ox=3;oy=6;w=2;h=10 Else ox=1;oy=6;w=14;h=4
+						
+						If rectRect(px+7,py+poy,9,15-poy,enm.x+ox,enm.y+oy,w,h)
+							hx = (enm.x+px)/2
+							hy = (enm.y+py)/2
+							hit=true
+							PlaySound(sndDie,2)
+							pa  = 3
+							psy = -4
+							die = True
+						Endif
+					Endif
+					
+					enm.x -= 2
+
+				Next
+
+				'Crea los obstaculos cada 1 segundo
+				If time>30
+
+					Local type:int
+					If score>0 Then type=Rnd(0,1)
+					If score>5 Then type=Rnd(0,2)
+					If score>15 Then type=Rnd(0,4)
+					If score>25 Then type=Rnd(0,6)
+
+					Select type
+					Case 0,1,2
+						For Local i:int=0 to type
+							Local enm:=New ENEMY
+							enm.x = 64+(8*i)
+							enm.y = 40
+							enm.t = i
+							enmA.AddLast(enm)
+						Next
+
+					Case 3
+						Local enm:=New ENEMY
+						enm.x = 64
+						enm.y = 40
+						enm.t = 3
+						enmA.AddLast(enm)
+
+					Case 4
+						Local enm:=New ENEMY
+						enm.x = 64
+						enm.y = 34
+						enm.t = 4
+						enmA.AddLast(enm)
+
+					Case 5
+						Local enm:=New ENEMY
+						enm.x = 64
+						enm.y = 42
+						enm.t = 4
+						enmA.AddLast(enm)
+					End
+					
+					'Aumenta la puntuacion
+					score += 1
+					
+					'Resetea el tiempo
+					time = 0
+
+				Endif
+				time += 1
+				
+				If hit
+					If ha<4
+						ha += 1
+					Else
+						ha=0
+						hit=False
+					endif
+				endif
+				
+				'Si el jugador esta por debado de 64, se termina la partida
+				If py>64
+					CheckScore()
+					fader = 1
+					enmA.Clear()
+					state=OVER
+				Endif
+
+			Case OVER
+
+				'Si hay una nueva puntuacion...
+				If ranking
+					EnterPlayer(sndSelect)
+				Else
+					If KeyHit(KEY_X)
+						fader = 1
+						score = 0
+						txt=""
+						PlaySound(sndSelect,3)
+						state=MENU
+					Endif
+				endif
+	
+			End
+			
+		End
+
+	'Actualiza el fondo de pantalla
+		For Local bg:=Eachin bgA
+		
+			Select bg.i
+			Case 0,1,2
+				If bg.x <= -8
+					bg.x = 64
+					bg.t = Rnd(0,8)
+				Endif
+				If bg.i = 0 Then bg.x -= 1
+				If bg.i = 1 Then bg.x -= 2
+				If bg.i = 2 Then bg.x -= 4
+			Case 3
+				If bg.x <= -16
+					If bgA.Count<32
+						For Local i:int=0 until Int(Rnd(1,4))
+							Local tmp:=New BG
+							tmp.x = 8*Int(Rnd(8,24))
+							tmp.y = 8*Int(Rnd(2,5))
+							tmp.i = 3
+							bgA.AddLast(tmp)
+						Next
+					Endif
+					bgA.RemoveEach(bg)
+				Endif
+				bg.x -= 0.2
+			Case 4
+				If bg.x <= -32 Then bg.x = 64+8*Int(Rnd(0,8))
+				bg.x -= 0.1
+				If Not bg.on
+
+					If bg.t>30
+						If Int(Rnd(0,4))=2 Then bg.on=True
+						bg.t=0
+					Endif
+					bg.t += 1
+				Else
+					If bg.a<5.8
+						bg.a += 0.2
+					Else
+						bg.a=0
+						bg.on=False
+					endif
+				endif
+					
+			Case 5
+				If bg.x <= -32 Then bg.x = 64+8*Int(Rnd(0,8))
+				bg.x -= 0.05
+			End
+			
+		next
+		
+	'Actualiza el oscurecimiento de pantalla
+	
+		If fader > 0.05 Then fader -= 0.05 Else fader=0
+		
+	End
+	
+    Method OnRender()
+		
+	    UpdateVirtualDisplay()
+	    
+	    DrawImage(imgSky,0,0)
+	    
+		For Local bg:=Eachin bgA
+			If bg.i = 0 Then DrawImage(imgFloor,bg.x,52,bg.t)
+			If bg.i = 1 Then DrawImage(imgEarth,bg.x,56,bg.t)
+			If bg.i = 2 Then DrawImage(imgGrass,bg.x,60,bg.t)
+			If bg.i = 3 Then DrawImage(imgCloud,bg.x,bg.y,0)
+			If bg.i = 4 Then DrawImage(imgVolcano,bg.x,22,bg.a)
+			If bg.i = 5 Then DrawImage(imgMoon,bg.x,bg.y,0)
+	    next
+
+		Select state
+		
+		Case MENU
+
+			DrawImage(imgTitle,0,2)
+
+			SetColor(0,0,0)
+			Text("[TheMrCerebro]",32,58,0.5,0.5)
+			
+			SetAlpha(0.5+Cos(0.5 * Millisecs() Mod 360)*0.5)
+			
+			SetColor(0,255,255)
+			Text("Press",32,26,0.5,0.5)
+			Text("-X-",32,26+7,0.5,0.5)
+			Text("to ESCAPE",32,26+7+7,0.5,0.5)
+		
+		Case INGAME
+
+			For Local enm:=Eachin enmA
+				If enm.t<4
+					DrawImage(imgCactus,enm.x,enm.y,enm.t)
+				else
+					DrawImage(imgBird,enm.x,enm.y,0.01*Millisecs() Mod 2)
+				endif
+			Next
+
+			DrawImage(imgPlayer,px,py,pa)
+			
+			If hit Then DrawImage(imgHit,hx,hy,ha)
+		
+			Text(score,63,-1,1,0)
+			
+		Case OVER
+		
+			DrawImage(imgDie,0,0,0.01 * Millisecs() Mod 4)
+			DrawScores(255,0,0,0,255,255)
+			
+		End
+
+		If fader>0
+			SetAlpha(fader)
+			SetColor(255,0,255)
+			Rect(0,0,64,64)
+		Endif
+	
+	End
+	
+Private
+
+	Enumerate MENU,INGAME,OVER
+
+	Field bgA:=New List<BG>
+	Field enmA:=New List<ENEMY>
+	
+	Field imgTitle:Image
+	Field imgPlayer:Image
+	Field imgCactus:Image
+	Field imgBird:Image
+	Field imgSky:Image
+	Field imgFloor:Image
+	Field imgEarth:Image
+	Field imgGrass:Image
+	Field imgCloud:Image
+	Field imgVolcano:Image
+	Field imgMoon:Image
+	Field imgDie:Image
+	Field imgHit:Image
+
+	Field sndSelect:Sound
+	Field sndDie:Sound
+	Field sndJump:Sound
+	
+	Field state:int,fullscreen:bool,fader:float
+	Field px:float,py:float,psy:float,poy:float,pa:int,jump:bool,die:bool
+	Field hx:float,hy:float,ha:int,hit:bool
+	Field time:int
+
+end
